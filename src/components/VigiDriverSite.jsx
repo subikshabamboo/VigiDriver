@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { Link } from "react-router-dom";
 import {
   ShieldCheck,
   Eye,
@@ -171,10 +172,10 @@ export default function VigiDriverSite() {
                 no special hardware.
               </p>
               <div style={{ display: "flex", gap: 12, marginTop: 30, flexWrap: "wrap" }}>
-                <a href="#features" className="vgs-btn-primary">
-                  Explore features <ArrowRight size={16} />
-                </a>
-                <a href="#contact" className="vgs-btn-ghost">Contact the team</a>
+                <Link to="/dashboard" className="vgs-btn-primary">
+                  Launch Live Dashboard <ArrowRight size={16} />
+                </Link>
+                <a href="#features" className="vgs-btn-ghost">Explore features</a>
               </div>
 
               <div style={{ display: "flex", gap: 36, marginTop: 44, flexWrap: "wrap" }}>

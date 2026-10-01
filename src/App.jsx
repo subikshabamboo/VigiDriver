@@ -1,73 +1,50 @@
-import { useState } from "react";
-import VigiDriverSite from "./components/VigiDriverSite";
-import ModelSandbox from "./components/ModelSandbox";
+// App.jsx
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import NavBar from './components/Navbar';
+import VigiDriverSite from './components/VigiDriverSite';
+import LiveMonitoringDashboard from './components/Livemonitoringdashboard';
+import AnalyticsHistory from './components/Analyticshistory';
+import ModelSettings from './components/Modelsettings';
+import ModelSandbox from './components/ModelSandbox';
 
 function App() {
-  const [page, setPage] = useState("site");
-
-  // Inline styles that utilize your global CSS variables
-  const navStyles = {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: "16px 32px",
-    borderBottom: "1px solid var(--border)",
-    background: "var(--bg)",
-  };
-
-  const logoStyles = {
-    fontSize: "20px",
-    fontWeight: "600",
-    color: "var(--text-h)",
-    fontFamily: "var(--heading)",
-  };
-
-  const buttonGroupStyles = {
-    display: "flex",
-    gap: "12px",
-  };
-
-  const getButtonStyles = (isActive) => ({
-    fontFamily: "var(--sans)",
-    fontSize: "15px",
-    fontWeight: "500",
-    padding: "8px 16px",
-    borderRadius: "6px",
-    cursor: "pointer",
-    transition: "all 0.2s ease",
-    border: isActive ? "1px solid var(--accent)" : "1px solid transparent",
-    background: isActive ? "var(--accent-bg)" : "transparent",
-    color: isActive ? "var(--accent)" : "var(--text)",
-  });
-
   return (
-    <>
-      <nav style={navStyles}>
-        {/* Branding/Logo Area */}
-        <div style={logoStyles}>VigiDriver</div>
-
-        {/* Navigation Tabs */}
-        <div style={buttonGroupStyles}>
-          <button 
-            onClick={() => setPage("site")} 
-            style={getButtonStyles(page === "site")}
-          >
-            Site
-          </button>
-          <button 
-            onClick={() => setPage("sandbox")} 
-            style={getButtonStyles(page === "sandbox")}
-          >
-            Model Sandbox
-          </button>
-        </div>
-      </nav>
-
-      {/* Main Content Area */}
-      <main style={{ flexGrow: 1 }}>
-        {page === "site" ? <VigiDriverSite /> : <ModelSandbox />}
-      </main>
-    </>
+    <Router>
+      <Routes>
+        {/* Landing page - no navbar */}
+        <Route path="/" element={<VigiDriverSite />} />
+        
+        {/* Dashboard and other pages with navbar */}
+        <Route path="/dashboard" element={
+          <>
+            <NavBar />
+            <LiveMonitoringDashboard />
+          </>
+        } />
+        <Route path="/analytics" element={
+          <>
+            <NavBar />
+            <AnalyticsHistory />
+          </>
+        } />
+        <Route path="/settings" element={
+          <>
+            <NavBar />
+            <ModelSettings />
+          </>
+        } />
+        <Route path="/sandbox" element={
+          <>
+            <NavBar />
+            <ModelSandbox />
+          </>
+        } />
+        
+        {/* Redirect any unknown routes to dashboard */}
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      </Routes>
+    </Router>
   );
 }
 
