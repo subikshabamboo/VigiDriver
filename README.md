@@ -131,3 +131,65 @@ This generates a side-by-side comparison (`novelty_comparison.png`) demonstratin
 ## 📜 License
 
 This project is open-source and available under the [MIT License](https://www.google.com/search?q=LICENSE).
+
+---
+
+# 🌐 VigiDriver Web Application (Full-Stack)
+
+VigiDriver also ships as a complete, working web application: a React + Vite frontend and a FastAPI inference backend that loads **both** trained checkpoints from `backend/weights/`.
+
+## Architecture
+
+```text
+React (Vite, port 5173)                 FastAPI backend (port 8000)
+┌──────────────────────────┐   HTTP/WS  ┌──────────────────────────────────┐
+│ /            Landing page│◄──────────►│ /api/monitor/start|stop|state    │
+│ /dashboard  Live monitor │  JSON+JPEG │ /api/ws/monitor   /api/cam       │
+│ /alerts     Alert screen │            │ /api/analyze (one-shot upload)   │
+│ /analytics  History      │            │ /api/sessions  /api/stats        │
+│ /contact    Support      │            │ /api/contact                     │
+└──────────────────────────┘            └──────────────────────────────────┘
+                                                  │
+                     MobileNetV2 (Dataset 1) ─────┤ fused drowsiness probability
+                     VigCNN 4-conv (Dataset 2) ───┤ + Grad-CAM heat-strip
+                                                  │
+                                          SQLite (vigidriver.db)
+                                 sessions · alerts · attention · enquiries
+```
+
+**Models** (`backend/models.py`)
+
+* `trained_model_weights_MOBILENETV2_DATASET1.pth` — MobileNetV2, binary head; output = P(drowsy).
+* `trained_model_weights_FINAL_DATASET2.pth` — custom 4-conv CNN; output = P(alert), inverted before fusion.
+* Head outputs are temperature-calibrated and fused 50/50. Grad-CAM on the MobileNetV2 last conv block drives the dashboard attention heat-strip.
+
+**Alert cascade** (`backend/vision.py`) — a soft warning when drowsiness stays above threshold for a short burst, escalating to a *critical fatigue-cascade* alert when sustained. The alert screen plays an escalating WebAudio siren + spoken instruction and shows a full-width red banner with acknowledge control.
+
+## Run it
+
+```bash
+# 1) Backend (loads both .pth checkpoints)
+pip install -r backend/requirements.txt
+python backend/run.py                 # http://127.0.0.1:8000  (API docs at /docs)
+
+# 2) Frontend (second terminal)
+npm install
+npm run dev                           # http://localhost:5173
+```
+
+Model checkpoints are **not** committed to git — place them in `backend/weights/`:
+
+```text
+backend/weights/trained_model_weights_MOBILENETV2_DATASET1.pth   (~9 MB)
+backend/weights/trained_model_weights_FINAL_DATASET2.pth         (~415 MB)
+```
+
+## Pages
+
+| Route | Page | What it does |
+|---|---|---|
+| `/` | Landing page | Public entry point introducing VigiDriver's safety features (unchanged). |
+| `/dashboard` | Live monitoring dashboard | Live driver-facing feed with tracked face bounding box, fused classification state, and Grad-CAM attention heat-strip. Start/End persists a session. |
+| `/alerts` | Alert & warning notifications | High-priority visual + auditory banners on a critical fatigue cascade, escalation ladder, live event log, audit summary. |
+| `/analytics` | Driver analytics & session history | Session audit table with outcomes, per-session attention traces, fleet-wide attention-weight distribution. |
+| `/contact` | Contact & support | Communication portal storing enquiries and technical-support tickets via the API. |
