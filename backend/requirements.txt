@@ -1,0 +1,8 @@
+# VigiDriver backend requirements (Python 3.10+)
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pydantic>=2.6
+torch>=2.1
+torchvision>=0.16
+opencv-python>=4.8
+numpy>=1.24
