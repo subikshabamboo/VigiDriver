@@ -22,3 +22,12 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# VigiDriver runtime artifacts
+backend/vigidriver.db
+backend/weights/*.pth
+__pycache__/
+*.pid
+*.bak
+.freebuff/
+

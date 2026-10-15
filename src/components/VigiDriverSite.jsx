@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import { useState } from "react";
+import { Link } from "react-router-dom";
 import {
   ShieldCheck,
   Eye,
@@ -129,9 +130,12 @@ export default function VigiDriverSite() {
               ))}
             </nav>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <a href="#contact" className="vgs-btn-primary" style={{ padding: "9px 16px", fontSize: 13.5 }}>
-                Contact us
-              </a>
+              <Link to="/models" style={{ textDecoration: "none", color: C.navy, fontSize: 13.5, fontWeight: 600, padding: "8px 14px", border: `1px solid ${C.border}`, borderRadius: 8 }}>
+                Model Specs
+              </Link>
+              <Link to="/dashboard" className="vgs-btn-primary" style={{ padding: "9px 16px", fontSize: 13.5, textDecoration: "none" }}>
+                Live Dashboard
+              </Link>
               <button
                 className="vgs-menu-btn"
                 onClick={() => setMenuOpen((o) => !o)}
@@ -146,38 +150,41 @@ export default function VigiDriverSite() {
               {NAV_LINKS.map((l) => (
                 <a key={l.id} href={`#${l.id}`} className="vgs-nav-link" onClick={() => setMenuOpen(false)}>{l.label}</a>
               ))}
+              <Link to="/models" className="vgs-nav-link" onClick={() => setMenuOpen(false)}>Model Specs</Link>
+              <Link to="/dashboard" className="vgs-nav-link" onClick={() => setMenuOpen(false)}>Live Dashboard</Link>
             </div>
           )}
         </header>
 
         {/* ================= HERO ================= */}
         <section id="overview" style={{ background: C.surfaceAlt, padding: "60px 24px 74px" }}>
-          <div className="vgs-hero-grid" style={{ maxWidth: 1180, margin: "0 auto", display: "grid", gridTemplateColumns: "1.05fr 0.95fr", gap: 48, alignItems: "center" }}>
+          <div className="vgs-hero-grid" style={{ maxWidth: 1180, margin: "0 auto", display: "grid", gridTemplateColumns: "1fr", justifyItems: "center", gap: 56, alignItems: "center" }}>
             <div>
-              <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" }}>
+              <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap", justifyContent: "center" }}>
                 {["Driver monitoring", "CNN-LSTM", "Edge AI", "23CSE473"].map((tag) => (
                   <span key={tag} className="vgs-mono" style={{ fontSize: 11, color: C.navySoft, border: `1px solid ${C.border}`, background: C.bg, padding: "3px 9px", borderRadius: 20 }}>
                     #{tag}
                   </span>
                 ))}
               </div>
-              <h1 className="vgs-display" style={{ fontSize: 42, lineHeight: 1.15, fontWeight: 700, margin: 0, color: C.ink }}>
+              <h1 className="vgs-display" style={{ fontSize: 42, lineHeight: 1.15, fontWeight: 700, margin: 0, color: C.ink, textAlign: "center" }}>
                 Catching micro-sleep before it becomes a crash
               </h1>
-              <p style={{ fontSize: 16.5, color: C.inkMuted, lineHeight: 1.65, marginTop: 18, maxWidth: 520 }}>
+              <p style={{ fontSize: 16.5, color: C.inkMuted, lineHeight: 1.65, marginTop: 18, maxWidth: 640, textAlign: "center" }}>
                 VigiDriver is a vision-based driver monitoring system that tracks how fatigue
-                actually builds — frame by frame, blink by blink — instead of guessing from a
-                single snapshot. It runs entirely on-device, works in total darkness, and needs
-                no special hardware.
+                actually builds — frame by frame, blink by blink — powered strictly by our
+                5-Conv2D Deep Neural Network checkpoint.
               </p>
-              <div style={{ display: "flex", gap: 12, marginTop: 30, flexWrap: "wrap" }}>
-                <a href="#features" className="vgs-btn-primary">
-                  Explore features <ArrowRight size={16} />
-                </a>
-                <a href="#contact" className="vgs-btn-ghost">Contact the team</a>
+              <div style={{ display: "flex", gap: 12, marginTop: 30, justifyContent: "center", flexWrap: "wrap" }}>
+                <Link to="/dashboard" className="vgs-btn-primary" style={{ textDecoration: "none" }}>
+                  Launch Live Dashboard <ArrowRight size={16} />
+                </Link>
+                <Link to="/models" className="vgs-btn-ghost" style={{ textDecoration: "none" }}>
+                  Inspect Model &amp; Weights
+                </Link>
               </div>
 
-              <div style={{ display: "flex", gap: 36, marginTop: 44, flexWrap: "wrap" }}>
+              <div style={{ display: "flex", gap: 36, marginTop: 44, justifyContent: "center", flexWrap: "wrap" }}>
                 <Stat value="2" label="Behavioral signals fused: EAR + MAR" />
                 <Stat value="<1s" label="On-device alert latency, no cloud round trip" />
                 <Stat value="0" label="Specialized sensors required" />
@@ -277,14 +284,14 @@ export default function VigiDriverSite() {
         </section>
 
         {/* ================= OPERATION ================= */}
-        <section style={{ padding: "84px 24px" }}>
-          <div style={{ maxWidth: 1180, margin: "0 auto" }} className="vgs-card">
-            <div style={{ padding: "34px 36px" }}>
+        <section style={{ padding: "80px 28px", textAlign: "center" }}>
+          <div style={{ maxWidth: 1180, margin: "0 auto", width: "100%" }}>
+            <div className="vgs-card" style={{ padding: "66px 84px", textAlign: "center", boxShadow: "0 20px 50px rgba(22,45,70,0.13)", borderRadius: 16 }}>
               <SectionEyebrow>Operation principle</SectionEyebrow>
-              <h2 className="vgs-display" style={{ fontSize: 24, fontWeight: 700, margin: "8px 0 16px", color: C.ink }}>
+              <h2 className="vgs-display" style={{ fontSize: 28, fontWeight: 700, margin: "14px 0 24px", color: C.ink, textAlign: "center" }}>
                 From raw frame to a calibrated alert
               </h2>
-              <p style={{ color: C.inkMuted, fontSize: 14.5, lineHeight: 1.7, maxWidth: 760 }}>
+              <p style={{ color: C.inkMuted, fontSize: 17.5, lineHeight: 1.85, maxWidth: 880, textAlign: "center" }}>
                 Each frame is brightness-corrected, reduced to eye and mouth ratios, then handed
                 to the LSTM alongside recent history. A normal blink and the start of a
                 micro-sleep can look identical in one frame — the difference only appears once
@@ -457,32 +464,11 @@ function ContactRow({ icon, title, text }) {
 function HeroArt() {
   return (
     <div style={{ display: "flex", justifyContent: "center" }}>
-      <svg width="100%" height="320" viewBox="0 0 420 320" style={{ maxWidth: 420 }}>
-        <rect x="1" y="1" width="418" height="318" rx="18" fill="#FFFFFF" stroke={C.border} strokeWidth="1.5" />
-        {/* windshield horizon */}
-        <path d="M20 210 Q210 150 400 210" stroke={C.border} strokeWidth="2" fill="none" />
-        {/* steering wheel */}
-        <circle cx="210" cy="255" r="70" stroke={C.border} strokeWidth="6" fill="none" />
-        <circle cx="210" cy="255" r="14" stroke="#C9D0DA" strokeWidth="4" fill="none" />
-        <line x1="210" y1="241" x2="210" y2="188" stroke={C.border} strokeWidth="6" />
-        <line x1="196" y1="264" x2="150" y2="288" stroke={C.border} strokeWidth="6" />
-        <line x1="224" y1="264" x2="270" y2="288" stroke={C.border} strokeWidth="6" />
-        {/* face landmark mesh, top area */}
-        <ellipse cx="210" cy="105" rx="46" ry="60" fill="none" stroke={C.amber} strokeWidth="1.6" strokeOpacity="0.85" />
-        <ellipse cx="188" cy="92" rx="9" ry="4.5" fill="none" stroke={C.amber} strokeWidth="1.6" />
-        <ellipse cx="232" cy="92" rx="9" ry="4.5" fill="none" stroke={C.amber} strokeWidth="1.6" />
-        <ellipse cx="210" cy="135" rx="9" ry="4.5" fill="none" stroke={C.amber} strokeWidth="1.6" />
-        {[
-          [168, 68], [188, 60], [210, 56], [232, 60], [252, 68],
-          [170, 118], [178, 138], [195, 150], [210, 154], [225, 150], [242, 138], [250, 118],
-        ].map(([x, y], i) => (
-          <circle key={i} cx={x} cy={y} r="2" fill={C.amber} fillOpacity="0.9" />
-        ))}
-        {/* HUD alertness ring */}
-        <circle cx="340" cy="70" r="34" stroke={C.border} strokeWidth="6" fill="none" />
-        <path d="M 306 70 A 34 34 0 0 1 368.8 55.6" stroke={C.teal} strokeWidth="6" fill="none" strokeLinecap="round" />
-        <text x="340" y="76" textAnchor="middle" fontFamily="JetBrains Mono, monospace" fontSize="15" fill={C.ink} fontWeight="600">92</text>
-      </svg>
+      <img
+        src={"/src/assets/hero.png"}
+        alt="Car dashboard at night with illuminated steering wheel"
+        style={{ width: "100%", maxWidth: 520, height: "auto", borderRadius: 18, objectFit: "cover", display: "block" }}
+      />
     </div>
   );
 }
