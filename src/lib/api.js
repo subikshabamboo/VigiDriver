@@ -23,8 +23,16 @@ export const C = {
   consoleBorder: "#1F2C3A",
 };
 
-/** Base URL of the FastAPI backend. */
-export const API_BASE = import.meta.env.VITE_API_BASE || "http://127.0.0.1:8000";
+/** Base URL of the FastAPI backend.
+ * In production (Render, Hugging Face, or unified server), API is on the same origin (empty string "").
+ * In standalone Vite dev server (npm run dev on port 5173), it defaults to localhost:8000.
+ */
+export const API_BASE =
+  import.meta.env.VITE_API_BASE !== undefined
+    ? import.meta.env.VITE_API_BASE
+    : import.meta.env.DEV
+      ? "http://127.0.0.1:8000"
+      : "";
 
 export async function apiGet(path) {
   const res = await fetch(`${API_BASE}${path}`);

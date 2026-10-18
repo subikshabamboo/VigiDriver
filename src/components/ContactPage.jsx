@@ -229,7 +229,7 @@ export default function ContactPage() {
           <Card style={{ padding: "14px 16px", display: "flex", gap: 10, alignItems: "center" }}>
             <Mail size={16} color={C.navy} />
             <span style={{ fontSize: 12.5, color: C.inkMuted }}>
-              API base: <span className="vd-mono">{API_BASE}</span> — enquiries POST to{" "}
+              API base: <span className="vd-mono">{API_BASE || "(same origin)"}</span> — enquiries POST to{" "}
               <span className="vd-mono">/api/contact</span>.
             </span>
           </Card>
