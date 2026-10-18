@@ -8,7 +8,6 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
-dist
 dist-ssr
 *.local
 
@@ -31,3 +30,9 @@ __pycache__/
 *.bak
 .freebuff/
 
+# Scratch, diagnostics and local reports
+diag_dark_view.html
+eslint_report.json
+*.docx
+reports/
+vite_live.log

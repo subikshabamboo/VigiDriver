@@ -58,8 +58,7 @@ export default function LiveMonitoringDashboard() {
   const [starting, setStarting] = useState(false);
   const [threshold, setThreshold] = useState(0.50);
   const [driverLabel, setDriverLabel] = useState("Driver_01");
-  const [cameraIndex, setCameraIndex] = useState(0);
-  const [useSimulation, setUseSimulation] = useState(false);
+  const [sourceMode, setSourceMode] = useState("browser"); // "browser" | "sim" | cameraIndex
   const [cameras, setCameras] = useState([]);
   const [muted, setMuted] = useState(false);
   const [error, setError] = useState(null);
@@ -69,6 +68,10 @@ export default function LiveMonitoringDashboard() {
   const prevTier = useRef("normal");
   const feedRef = useRef(null);
   const fileInputRef = useRef(null);
+  const browserVideoRef = useRef(null);
+  const browserStreamRef = useRef(null);
+  const frameIntervalRef = useRef(null);
+  const offscreenCanvasRef = useRef(null);
 
   /* -- backend health & model metadata on mount ------------------------- */
   const checkHealth = useCallback(() => {
@@ -137,7 +140,31 @@ export default function LiveMonitoringDashboard() {
     }
   }, [state?.tier, muted]);
 
-  useEffect(() => () => stopAllAudio(), []);
+  useEffect(() => () => {
+    stopAllAudio();
+    if (frameIntervalRef.current) {
+      clearInterval(frameIntervalRef.current);
+      frameIntervalRef.current = null;
+    }
+    if (browserStreamRef.current) {
+      browserStreamRef.current.getTracks().forEach((t) => t.stop());
+      browserStreamRef.current = null;
+    }
+  }, []);
+
+  // When backend ends session automatically, stop local browser webcam tracks
+  useEffect(() => {
+    if (state && !state.running) {
+      if (frameIntervalRef.current) {
+        clearInterval(frameIntervalRef.current);
+        frameIntervalRef.current = null;
+      }
+      if (browserStreamRef.current) {
+        browserStreamRef.current.getTracks().forEach((t) => t.stop());
+        browserStreamRef.current = null;
+      }
+    }
+  }, [state?.running]);
 
   const running = !!state?.running;
 
@@ -146,24 +173,115 @@ export default function LiveMonitoringDashboard() {
     setError(null);
     unlockAudio();
     try {
-      await apiPost("/api/monitor/start", {
-        driver_label: driverLabel || "Driver_01",
-        threshold,
-        camera_index: cameraIndex,
-        use_camera: !useSimulation,
-        use_simulation: useSimulation,
-      });
+      if (sourceMode === "browser") {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          throw new Error("Browser camera API is not supported on this browser or requires HTTPS.");
+        }
+        let stream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" },
+            audio: false,
+          });
+        } catch (mediaErr) {
+          throw new Error(`Could not access device camera: ${mediaErr.message || mediaErr.name}. Please grant camera permission.`);
+        }
+        browserStreamRef.current = stream;
+        if (browserVideoRef.current) {
+          browserVideoRef.current.srcObject = stream;
+          try {
+            await browserVideoRef.current.play();
+          } catch (_) {}
+        }
+
+        await apiPost("/api/monitor/start", {
+          driver_label: driverLabel || "Driver_01",
+          threshold,
+          camera_index: 0,
+          use_camera: false,
+          use_simulation: false,
+          use_browser_cam: true,
+        });
+
+        // Frame streaming loop: capture canvas frame at ~10 FPS and push to backend
+        let isPushing = false;
+        frameIntervalRef.current = setInterval(() => {
+          if (isPushing || !browserVideoRef.current || browserVideoRef.current.readyState < 2) return;
+          const video = browserVideoRef.current;
+          if (!video.videoWidth || !video.videoHeight) return;
+
+          let canvas = offscreenCanvasRef.current;
+          if (!canvas) {
+            canvas = document.createElement("canvas");
+            offscreenCanvasRef.current = canvas;
+          }
+          canvas.width = 640;
+          canvas.height = 480;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(video, 0, 0, 640, 480);
+
+          isPushing = true;
+          canvas.toBlob(
+            async (blob) => {
+              try {
+                if (!blob) return;
+                const fd = new FormData();
+                fd.append("file", blob, "frame.jpg");
+                const res = await fetch(`${API_BASE}/api/monitor/frame`, {
+                  method: "POST",
+                  body: fd,
+                });
+                if (res.ok) {
+                  const data = await res.json();
+                  setState(data);
+                }
+              } catch (err) {
+                console.warn("Frame push failed", err);
+              } finally {
+                isPushing = false;
+              }
+            },
+            "image/jpeg",
+            0.65
+          );
+        }, 100);
+      } else {
+        await apiPost("/api/monitor/start", {
+          driver_label: driverLabel || "Driver_01",
+          threshold,
+          camera_index: sourceMode === "sim" ? 0 : (parseInt(sourceMode, 10) || 0),
+          use_camera: sourceMode !== "sim",
+          use_simulation: sourceMode === "sim",
+          use_browser_cam: false,
+        });
+      }
       prevTier.current = "normal";
     } catch (e) {
       setError(e.message);
+      if (browserStreamRef.current) {
+        browserStreamRef.current.getTracks().forEach((t) => t.stop());
+        browserStreamRef.current = null;
+      }
+      if (frameIntervalRef.current) {
+        clearInterval(frameIntervalRef.current);
+        frameIntervalRef.current = null;
+      }
     } finally {
       setStarting(false);
     }
-  }, [driverLabel, threshold, cameraIndex, useSimulation]);
+  }, [driverLabel, threshold, sourceMode]);
 
   const handleStop = useCallback(async () => {
     setError(null);
     stopAllAudio();
+    if (frameIntervalRef.current) {
+      clearInterval(frameIntervalRef.current);
+      frameIntervalRef.current = null;
+    }
+    if (browserStreamRef.current) {
+      browserStreamRef.current.getTracks().forEach((t) => t.stop());
+      browserStreamRef.current = null;
+    }
     try {
       await apiPost("/api/monitor/stop");
     } catch (e) {
@@ -406,16 +524,9 @@ export default function LiveMonitoringDashboard() {
           <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12.5, fontWeight: 600, color: C.inkMuted }}>
             SOURCE
             <select
-              value={useSimulation ? "sim" : cameraIndex}
+              value={sourceMode}
               disabled={running}
-              onChange={(e) => {
-                if (e.target.value === "sim") {
-                  setUseSimulation(true);
-                } else {
-                  setUseSimulation(false);
-                  setCameraIndex(parseInt(e.target.value, 10));
-                }
-              }}
+              onChange={(e) => setSourceMode(e.target.value)}
               style={{
                 border: `1px solid ${C.border}`,
                 borderRadius: 8,
@@ -425,11 +536,11 @@ export default function LiveMonitoringDashboard() {
                 background: C.bg,
               }}
             >
-              {cameras.length === 0 && <option value={0}>Webcam 0</option>}
+              <option value="browser">💻 My Device Camera (Browser Webcam)</option>
+              <option value="sim">🚗 Simulation Stream (Synthetic Cabin Video)</option>
               {cameras.map((i) => (
-                <option key={i} value={i}>Webcam {i}</option>
+                <option key={i} value={i}>📹 Host Machine Webcam {i}</option>
               ))}
-              <option value="sim">Simulation Stream (Real CNN Inference)</option>
             </select>
           </label>
 
@@ -512,6 +623,8 @@ export default function LiveMonitoringDashboard() {
             icon={running && !state?.cam_error ? <Video size={15} /> : <CameraOff size={15} />}
             text={`Cabin Feed — ${state?.driver_label || driverLabel}`}
           />
+          {/* Hidden offscreen video element for browser media stream capture */}
+          <video ref={browserVideoRef} playsInline autoPlay muted style={{ display: "none" }} />
           <div
             ref={feedRef}
             style={{
@@ -527,13 +640,26 @@ export default function LiveMonitoringDashboard() {
               justifyContent: "center",
             }}
           >
-            {running && state?.jpeg ? (
+            {running ? (
               <>
-                <img
-                  src={`data:image/jpeg;base64,${state.jpeg}`}
-                  alt="Live driver feed"
-                  style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
-                />
+                {state?.use_browser_cam && state?.jpeg ? (
+                  <img
+                    src={`data:image/jpeg;base64,${state.jpeg}`}
+                    alt="Live driver feed"
+                    style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
+                  />
+                ) : (
+                  <img
+                    src={`${API_BASE}/api/cam?sid=${state?.session_id || 0}`}
+                    alt="Live driver feed"
+                    style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
+                    onError={(e) => {
+                      if (state?.jpeg) {
+                        e.currentTarget.src = `data:image/jpeg;base64,${state.jpeg}`;
+                      }
+                    }}
+                  />
+                )}
                 {!state?.face_found && (
                   <div
                     style={{

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import heroImg from "../assets/hero.png";
 import {
   ShieldCheck,
   Eye,
@@ -465,7 +466,10 @@ function HeroArt() {
   return (
     <div style={{ display: "flex", justifyContent: "center" }}>
       <img
-        src={"/src/assets/hero.png"}
+        src={heroImg}
+        onError={(e) => {
+          e.currentTarget.src = "/hero.png";
+        }}
         alt="Car dashboard at night with illuminated steering wheel"
         style={{ width: "100%", maxWidth: 520, height: "auto", borderRadius: 18, objectFit: "cover", display: "block" }}
       />

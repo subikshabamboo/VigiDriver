@@ -22,8 +22,18 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
+import os
 import re
+import sys
 import time
+
+BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
+if BACKEND_DIR not in sys.path:
+    sys.path.insert(0, BACKEND_DIR)
+
+ROOT_DIR = os.path.dirname(BACKEND_DIR)
+DIST_DIR = os.path.join(ROOT_DIR, "dist")
+INDEX_HTML = os.path.join(DIST_DIR, "index.html")
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Iterator
@@ -70,6 +80,7 @@ class MonitorState:
     threshold: float = 0.50
     camera_index: int = 0
     use_camera: bool = True
+    use_browser_cam: bool = False
 
     frame_count: int = 0
     fps: float = 0.0
@@ -163,7 +174,8 @@ app = FastAPI(title="VigiDriver API", version="2.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
+    allow_origins=["*"],
+    allow_origin_regex=r".*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -905,6 +917,7 @@ def snapshot() -> dict[str, Any]:
         "running": state.running,
         "session_id": state.session_id,
         "driver_label": state.driver_label,
+        "use_browser_cam": state.use_browser_cam,
         "frame_count": state.frame_count,
         "fps": round(state.fps, 1),
         "p_drowsy": round(state.p_drowsy, 4),
@@ -991,6 +1004,12 @@ async def monitor_loop() -> None:
                 stop_camera()
                 stop_simulation()
                 state.session_id = None
+                continue
+
+            if state.use_browser_cam:
+                # Browser client streams frames directly into /api/monitor/frame
+                await asyncio.sleep(0.05)
+                continue
 
             t_frame = time.perf_counter()
             frame = await asyncio.to_thread(read_frame)
@@ -1000,12 +1019,15 @@ async def monitor_loop() -> None:
             else:
                 state.cam_error = "frame read failed"
 
-            # Report the TRUE processing rate, not a fixed 15 fps — otherwise a
-            # slow machine looks smooth while the feed visibly stutters.
             elapsed = max(time.perf_counter() - t_frame, 1e-3)
-            state.fps = 0.8 * state.fps + 0.2 * (1.0 / elapsed)
+            cur_fps = 1.0 / elapsed
+            state.fps = cur_fps if state.fps == 0.0 else (0.8 * state.fps + 0.2 * cur_fps)
 
-        await asyncio.sleep(1.0 / 15.0)
+            # Dynamic sleep targeting 20 FPS (0.05s total period)
+            dt_sleep = max(0.005, (1.0 / 20.0) - (time.perf_counter() - t_frame))
+            await asyncio.sleep(dt_sleep)
+        else:
+            await asyncio.sleep(0.05)
 
 
 # --------------------------------------------------------------------------- schemas
@@ -1016,6 +1038,7 @@ class StartRequest(BaseModel):
     camera_index: int = 0
     use_camera: bool = True
     use_simulation: bool = False
+    use_browser_cam: bool = False
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -1036,7 +1059,10 @@ class ContactRequest(BaseModel):
 # --------------------------------------------------------------------------- routes
 
 @app.get("/")
-def root() -> dict[str, Any]:
+def root() -> Any:
+    if os.path.isfile(INDEX_HTML):
+        from fastapi.responses import FileResponse
+        return FileResponse(INDEX_HTML)
     return {
         "name": "VigiDriver API",
         "version": "1.0.0",
@@ -1081,8 +1107,20 @@ async def monitor_start(req: StartRequest) -> dict[str, Any]:
         stop_camera()
         start_simulation()
         simulated_frame_count = 0
+        state.use_browser_cam = False
+        state.use_camera = False
+    elif req.use_browser_cam:
+        stop_camera()
+        stop_simulation()
+        state.use_browser_cam = True
+        state.use_camera = False
     elif req.use_camera:
+        state.use_browser_cam = False
+        state.use_camera = True
         await asyncio.to_thread(start_camera, req.camera_index)
+    else:
+        state.use_browser_cam = False
+        state.use_camera = False
 
     state.session_id = db.create_session(req.driver_label, req.threshold)
     state.running = True
@@ -1144,6 +1182,7 @@ async def monitor_stop() -> dict[str, Any]:
     if not state.running:
         raise HTTPException(status_code=409, detail="No session running")
     state.running = False
+    state.use_browser_cam = False
     await asyncio.sleep(0.3)
     if isinstance(capture, SimulatedCapture):
         stop_simulation()
@@ -1151,6 +1190,37 @@ async def monitor_stop() -> dict[str, Any]:
         stop_camera()
     session = db.end_session(state.session_id)
     return {"stopped": True, "session": session}
+
+
+@app.post("/api/monitor/frame")
+async def monitor_frame(file: UploadFile = File(...)) -> dict[str, Any]:
+    """Ingest and analyze a live video frame pushed from the client browser webcam."""
+    if not state.running or state.session_id is None:
+        raise HTTPException(status_code=400, detail="No active monitoring session")
+
+    state.last_viewer_ts = time.time()
+    t_frame = time.perf_counter()
+
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty frame")
+
+    arr = np.frombuffer(data, np.uint8)
+    frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    if frame is None:
+        raise HTTPException(status_code=400, detail="Invalid image encoding")
+
+    state.cam_error = None
+    scores = await asyncio.to_thread(analyze_frame, frame, True)
+
+    elapsed = max(time.perf_counter() - t_frame, 1e-3)
+    cur_fps = 1.0 / elapsed
+    state.fps = cur_fps if state.fps == 0.0 else (0.8 * state.fps + 0.2 * cur_fps)
+
+    snap = snapshot()
+    snap["analysis"] = scores
+    return snap
+
 
 
 @app.get("/api/monitor/state")
@@ -1424,3 +1494,25 @@ async def ws_monitor(ws: WebSocket) -> None:
             await asyncio.sleep(0.2)
     except WebSocketDisconnect:
         return
+
+
+# --------------------------------------------------------------------------- static frontend
+if os.path.isdir(DIST_DIR):
+    from fastapi.staticfiles import StaticFiles
+    from fastapi.responses import FileResponse
+
+    assets_dir = os.path.join(DIST_DIR, "assets")
+    if os.path.isdir(assets_dir):
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def catch_all_spa(full_path: str):
+        if full_path.startswith("api/") or full_path in ("docs", "redoc", "openapi.json"):
+            raise HTTPException(status_code=404, detail="Not Found")
+        target = os.path.join(DIST_DIR, full_path)
+        if os.path.isfile(target):
+            return FileResponse(target)
+        if os.path.isfile(INDEX_HTML):
+            return FileResponse(INDEX_HTML)
+        raise HTTPException(status_code=404, detail="Not Found")
+

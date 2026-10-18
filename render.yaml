@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: vigidriver
+    env: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    envVars:
+      - key: TF_CPP_MIN_LOG_LEVEL
+        value: 2
+      - key: PYTHONUNBUFFERED
+        value: 1

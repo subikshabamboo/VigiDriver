@@ -73,15 +73,16 @@ def detect_face(frame_bgr: np.ndarray) -> tuple[int, int, int, int] | None:
     gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
     gray = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8)).apply(gray)
     h, w = gray.shape
-    # Minimum face size scales with resolution (~1/6 of frame) so both
-    # close-up webcams and wide cabin cams work.
-    min_side = (max(56, h // 6), max(56, w // 6))
+    # Downscale by 2 for real-time Haar detection (avoids ~800ms full-res scan)
+    small_gray = cv2.resize(gray, (w // 2, h // 2), interpolation=cv2.INTER_LINEAR)
+    min_side = (max(28, (h // 2) // 6), max(28, (w // 2) // 6))
     for cascade in _FACE_CASCADES:
         faces = cascade.detectMultiScale(
-            gray, scaleFactor=1.08, minNeighbors=4, minSize=min_side
+            small_gray, scaleFactor=1.1, minNeighbors=4, minSize=min_side
         )
         if len(faces):
-            return tuple(int(v) for v in max(faces, key=lambda f: f[2] * f[3]))
+            bx, by, bw, bh = max(faces, key=lambda f: f[2] * f[3])
+            return (int(bx * 2), int(by * 2), int(bw * 2), int(bh * 2))
     return None
 
 

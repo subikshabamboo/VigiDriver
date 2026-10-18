@@ -29,6 +29,7 @@ def main() -> None:
         host=args.host,
         port=int(args.port),
         reload=args.reload,
+        log_level="info",
     )
 
 
