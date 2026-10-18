@@ -23,14 +23,38 @@ import numpy as np
 # Face detection
 # ---------------------------------------------------------------------------
 
-_FACE_CASCADES = [
-    cv2.CascadeClassifier(cv2.data.haarcascades + name)
-    for name in (
-        "haarcascade_frontalface_default.xml",
-        "haarcascade_frontalface_alt.xml",
-        "haarcascade_frontalface_alt2.xml",
-    )
-]
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(BASE_DIR)
+CASCADES_DIR = os.path.join(PROJECT_ROOT, "models", "cascades")
+
+_FACE_CASCADES = []
+for name in (
+    "haarcascade_frontalface_default.xml",
+    "haarcascade_frontalface_alt2.xml",
+    "haarcascade_frontalface_alt.xml",
+):
+    # 1. Bundled in models/cascades/
+    bundled_path = os.path.join(CASCADES_DIR, name)
+    c = None
+    if os.path.isfile(bundled_path):
+        try:
+            cand = cv2.CascadeClassifier(bundled_path)
+            if not cand.empty():
+                c = cand
+        except Exception:
+            pass
+    # 2. Fallback to cv2.data.haarcascades
+    if c is None and hasattr(cv2, "data") and hasattr(cv2.data, "haarcascades"):
+        cv_path = getattr(cv2.data, "haarcascades", "") + name
+        if os.path.isfile(cv_path):
+            try:
+                cand = cv2.CascadeClassifier(cv_path)
+                if not cand.empty():
+                    c = cand
+            except Exception:
+                pass
+    if c is not None:
+        _FACE_CASCADES.append(c)
 
 
 def enhance_low_light(frame_bgr: np.ndarray, target_mean: float = 115.0) -> np.ndarray:
@@ -65,10 +89,11 @@ def enhance_low_light(frame_bgr: np.ndarray, target_mean: float = 115.0) -> np.n
 def detect_face(frame_bgr: np.ndarray) -> tuple[int, int, int, int] | None:
     """Return the largest (x, y, w, h) face box in the frame, or None.
 
-    Tries three Haar cascades in turn over CLAHE-normalized grayscale so
-    detection survives varied lighting, distance and camera quality. Dark
-    frames are brightness-lifted first so night-time detection still works.
+    Tries Haar cascades over CLAHE-normalized grayscale first.
+    If Haar fails or is unavailable, falls back directly to MediaPipe FaceLandmarker.
     """
+    if frame_bgr is None or frame_bgr.size == 0:
+        return None
     frame_bgr = enhance_low_light(frame_bgr)
     gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
     gray = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8)).apply(gray)
@@ -76,13 +101,43 @@ def detect_face(frame_bgr: np.ndarray) -> tuple[int, int, int, int] | None:
     # Downscale by 2 for real-time Haar detection (avoids ~800ms full-res scan)
     small_gray = cv2.resize(gray, (w // 2, h // 2), interpolation=cv2.INTER_LINEAR)
     min_side = (max(28, (h // 2) // 6), max(28, (w // 2) // 6))
+
     for cascade in _FACE_CASCADES:
-        faces = cascade.detectMultiScale(
-            small_gray, scaleFactor=1.1, minNeighbors=4, minSize=min_side
-        )
-        if len(faces):
-            bx, by, bw, bh = max(faces, key=lambda f: f[2] * f[3])
-            return (int(bx * 2), int(by * 2), int(bw * 2), int(bh * 2))
+        if cascade.empty():
+            continue
+        try:
+            faces = cascade.detectMultiScale(
+                small_gray, scaleFactor=1.1, minNeighbors=4, minSize=min_side
+            )
+            if len(faces):
+                bx, by, bw, bh = max(faces, key=lambda f: f[2] * f[3])
+                return (int(bx * 2), int(by * 2), int(bw * 2), int(bh * 2))
+        except cv2.error:
+            continue
+
+    # Fallback to MediaPipe FaceLandmarker when Haar detects nothing or fails
+    try:
+        landmarker = get_landmarker()
+        if landmarker is not None:
+            import mediapipe as mp
+            rgb_frame = np.ascontiguousarray(frame_bgr[:, :, ::-1])
+            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
+            mp_res = landmarker.detect(mp_image)
+            if mp_res and mp_res.face_landmarks:
+                lm = mp_res.face_landmarks[0]
+                xs = [p.x * w for p in lm]
+                ys = [p.y * h for p in lm]
+                pad_x = 0.08 * (max(xs) - min(xs))
+                pad_y = 0.12 * (max(ys) - min(ys))
+                bx = max(0, int(min(xs) - pad_x))
+                by = max(0, int(min(ys) - pad_y))
+                bw = min(w - bx, int(max(xs) - min(xs) + 2 * pad_x))
+                bh = min(h - by, int(max(ys) - min(ys) + 2 * pad_y))
+                if bw > 20 and bh > 20:
+                    return (bx, by, bw, bh)
+    except Exception:
+        pass
+
     return None
 
 
@@ -90,8 +145,7 @@ def detect_face(frame_bgr: np.ndarray) -> tuple[int, int, int, int] | None:
 # MediaPipe FaceLandmarker (pretrained model from Google)
 # ---------------------------------------------------------------------------
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-FACE_LANDMARKER_PATH = os.path.join(os.path.dirname(BASE_DIR), "models", "face_landmarker.task")
+FACE_LANDMARKER_PATH = os.path.join(PROJECT_ROOT, "models", "face_landmarker.task")
 
 _landmarker = None
 

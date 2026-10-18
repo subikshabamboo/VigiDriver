@@ -1211,7 +1211,11 @@ async def monitor_frame(file: UploadFile = File(...)) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail="Invalid image encoding")
 
     state.cam_error = None
-    scores = await asyncio.to_thread(analyze_frame, frame, True)
+    try:
+        scores = await asyncio.to_thread(analyze_frame, frame, True)
+    except Exception as exc:
+        logger.warning("Frame inference error: %s", exc)
+        scores = _empty_result(get_service(), temporal=True)
 
     elapsed = max(time.perf_counter() - t_frame, 1e-3)
     cur_fps = 1.0 / elapsed
